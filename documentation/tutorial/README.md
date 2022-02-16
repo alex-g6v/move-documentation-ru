@@ -249,34 +249,29 @@ module 0xCAFE::BasicCoin {
 
 </details>
 
-## Step 3: Designing my `BasicCoin` module<span id="Step3"><span>
+## Шаг 3: Дизайн модуля `BasicCoin`<span id="Step3"><span>
 
-In this section, we are going to design a module implementing a basic coin and balance interface, where coins can
-be minted and transferred between balances held under different addresses.
+В этой секции мы задизайним модуль монеты и интерфейс баланса. Монеты можно минтить и отправлять на балансы разных адресов.
 
-The signatures of the public Move function are the following:
+Публичный интерфейс модуля состоит из следующих функций:
 
 ```
-/// Publish an empty balance resource under `account`'s address. This function must be called before
-/// minting or transferring to the account.
+/// Создать нулевой баланс по указанному адресу. Эта функция должна быть вызывана до минтинга или передачи монет по этому адресу
 public fun publish_balance(account: &signer) { ... }
 
-/// Mint `amount` tokens to `mint_addr`. Mint must be approved by the module owner.
+/// Заминтить монеты по указанному адресу. Минтинг делается владельцем модуля монеты
 public fun mint(module_owner: &signer, mint_addr: address, amount: u64) acquires Balance { ... }
 
-/// Returns the balance of `owner`.
+/// Узнать баланс адреса
 public fun balance_of(owner: address): u64 acquires Balance { ... }
 
-/// Transfers `amount` of tokens from `from` to `to`.
+/// Передать монеты с одного адреса на другой
 public fun transfer(from: &signer, to: address, amount: u64) acquires Balance { ... }
 ```
 
-Next we look at the data structs we need for this module.
+Теперь посмотрим какие для этого нам понадобятся структуры.
 
-A Move module doesn't have its own storage. Instead, Move "global storage" (what we call our
-blockchain state) is indexed by addresses. Under each address there are Move modules (code) and Move resources (values).
-
-The global storage looks roughly like this in Rust syntax:
+У модуля в Move нет своего собственного хранилища. Вместо этого есть "глобальное хранилище" (то что мы называем состоянием блокчейна) поиск в котором осуществляется по адресу. По каждому адресу могут находиться модули (код) и ресурсы (значения). Проще говоря глобальное имеет следущую структуру (если выражаться на Rust):
 
 ```rust
 struct GlobalStorage {
@@ -285,10 +280,7 @@ struct GlobalStorage {
 }
 ```
 
-The Move resource storage under each address is a map from types to values. (An observant reader might observe that
-this means each address can only have one value of each type.) This conveniently provides us a native mapping indexed
-by addresses. In our `BasicCoin` module, we define the following `Balance` resource representing the number of coins
-each address holds:
+Хранилище по каждому адресу по сути является маппингом типов к значениям. (Внимательный читатель мог подметить что это означает что каждый адрес может содержать только одно значения для каждого типа ресурса). В нашем модуле `BasicCoin` мы определяем ресурс `Balance` который отражает сколько монет находится по адресу:
 
 ```
 /// Struct representing the balance of each address.
@@ -297,32 +289,30 @@ struct Balance has key {
 }
 ```
 
-Roughly the Move blockchain state should look like this:
+Упрощенное представление состояния блокчейна:
 
 ![](diagrams/move_state.png)
 
-#### Advanced topics:
+#### Продвинутые топики:
 
 <details>
-<summary><code>public(script)</code> functions</summary>
+<summary><code>public(script)</code> функции</summary>
 
-Only functions with `public(script)` visibility can be invoked directly in transactions. So if you would like to call the `transfer`
-method directly from a transaction, you'll want to change its signature to:
+Только функции с `public(script)` видимостью могут быть вызваны напрямую из скриптов транзакций. Так что если выхотите вызывать функцию `transfer` из транзакции то вам нужно изменить сигнатуру функции на:
 
 ```
 public(script) fun transfer(from: signer, to: address, amount: u64) acquires Balance { ... }
 ```
 
-Read more on Move function visibilities [here](https://diem.github.io/move/functions.html#visibility).
+Узнать больше об областях видимости функций можно [тут](https://diem.github.io/move/functions.html#visibility).
 
 </details>
 <details>
-<summary>Comparison with Ethereum/Solidity</summary>
+<summary>Сравнение с Ethereum/Solidity</summary>
 
-In most Ethereum [ERC-20](<(https://ethereum.org/en/developers/docs/standards/tokens/erc-20/)>) contracts, the balance of each address is stored in a _state variable_ of type
-<code>mapping(address => uint256)</code>. This state variable is stored in the storage of a particular smart contract.
+В большинстве [ERC-20](<(https://ethereum.org/en/developers/docs/standards/tokens/erc-20/)>) контрактов состояние баланса каждого адреса хранится в переменной типа <code>mapping(address => uint256)</code>. Эта переменная хранится в хранилище конкретного смарт контракта.
 
-The Ethereum blockchain state might look like this:
+Состояние блокчейна в Ethereum выглядит примерно так:
 
 ![](diagrams/solidity_state.png)
 
