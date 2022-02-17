@@ -411,3 +411,95 @@ fun withdraw(addr: address, amount: u64) : Coin acquires Balance {
 **Бонусные упражнения**
 
 - Что произойдет если мы попытаемся перевести слишком много токенов на баланс?
+
+## Шаг 5: Добавление юнит тестов в `BasicCoin`<span id="Step5"><span>
+
+На этом шаге мы взглянем на все юнит тесты которые мы написали для кода модуля из шага 4. А еще узнаем про инструменты которые помогают в написании тестов.
+
+Для начала давайте запустим команду `package test` в дирректории [`step_5/BasicCoin`](./step_5/BasicCoin)
+
+```bash
+move package test
+```
+
+На выходе вы должны увидеть нечто похожее:
+
+```
+BUILDING MoveStdlib
+BUILDING BasicCoin
+Running Move unit tests
+[ PASS    ] 0xcafe::BasicCoin::can_withdraw_amount
+[ PASS    ] 0xcafe::BasicCoin::init_check_balance
+[ PASS    ] 0xcafe::BasicCoin::init_non_owner
+[ PASS    ] 0xcafe::BasicCoin::publish_balance_already_exists
+[ PASS    ] 0xcafe::BasicCoin::publish_balance_has_zero
+[ PASS    ] 0xcafe::BasicCoin::withdraw_dne
+[ PASS    ] 0xcafe::BasicCoin::withdraw_too_much
+Test result: OK. Total tests: 7; passed: 7; failed: 0
+```
+
+Глядя на тесты из [модуля `BasicCoin`](./step_5/BasicCoin/sources/BasicCoin.move) можно понять что мы пытались написать тесты таким образом чтобы каждый покрывал какое-то отдельно взятое поведение модуля.
+
+<details>
+<summary>Упражения</summary>
+
+После того как познакомитесь с уже написанными тестами попробуйте написать тест `balance_of_dne` в `BasicCoin` который бы проверял слуай отсутствия ресурса `Balance` по адресу переданному в `balance_of`. Реализация займет всего пару строк!
+
+Решение для этого упражнения может быть найдено в директории [`step_5_sol`](./step_5_sol)
+
+</details>
+
+## Step 6: Релизация `BasicCoin` с поддержкой generics<span id="Step6"><span>
+
+В Move можно использовать generics чтобы описывать функции и структуры над другим типом данных. Generics - отличный инструмент для создания библиотек. В этом разделе мы сделаем наш `BasicCoin` дженеричным, посредством чего он может быть использован как библиотечный модуль для построения других модулей.
+
+Сначала нужно добавить параметры типов в наши структуры:
+
+```
+struct Coin<phantom CoinType> has store {
+    value: u64
+}
+
+struct Balance<phantom CoinType> has key {
+    coin: Coin<CoinType>
+}
+```
+
+Таким же образо можно добавить параметры типов и в функции. Например `withdraw` будет выглядеть следующим образом:
+
+```
+fun withdraw<CoinType>(addr: address, amount: u64) : Coin<CoinType> acquires Balance {
+    let balance = balance_of<CoinType>(addr);
+    assert!(balance >= amount, EINSUFFICIENT_BALANCE);
+    let balance_ref = &mut borrow_global_mut<Balance<CoinType>>(addr).coin.value;
+    *balance_ref = balance - amount;
+    Coin<CoinType> { value: amount }
+}
+```
+
+Взгляните на [`step_6/BasicCoin/sources/BasicCoin.move`](./step_6/BasicCoin/sources/BasicCoin.move) чтобы посмотреть полную реализацию.
+
+Сейчас читатели, знакомые с Etherium, могут подметить что этот модуль выполняет функцию схожую с той что играет [стандарт ERC20](https://ethereum.org/en/developers/docs/standards/tokens/erc-20/), который предоставляет интерфейс для реализации токенов в смартконтрактах. Одно из главных преимуществ использования дженериков это возможность переиспользования кода, так как в базовом модуле уже есть реализация которую можно кастомизировать для своих нужд.
+
+Мы создали небольшой модуль [`MyOddCoin`](./step_6/BasicCoin/sources/MyOddCoin.move) который использует тип `Coin` но переопределяет способ передачи монет: теперь передавать можно только нечетное количество монет. Так же мы добавили еще два [теста](./step_6/BasicCoin/sources/MyOddCoin.move) чтобы проверить это поведение. Вы уже знаете команды для запуска тестов из шагов 2 и 5.
+
+#### Продвинутые топики:
+
+<details>
+<summary><code>phantom</code> параметры</summary>
+
+В определении обоих типов `Coin` и `Balance` мы добавили параметр для типа: `CoinType` и он определен как `phantom` потому что он не используется в описании структур. Больше про phantom параметры можно прочитать <a href="https://diem.github.io/move/generics.html#phantom-type-parameters">тут</a>.
+
+</details>
+
+## Продвинутые шаги
+
+Перед тем как преступить к следующим шагам давайте убедимся что у вас установлены все зависимости необхдимые для прувера.
+
+Попробуйте запустить команду `boogie /version`. Если увидите ошибку вроде "command not found: boogie", то вам нужно запустить скрипт установки:
+
+```bash
+# run the following in diem repo root directory
+./scripts/dev_setup.sh -yp
+source ~/.profile
+```
