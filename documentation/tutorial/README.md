@@ -318,33 +318,28 @@ public(script) fun transfer(from: signer, to: address, amount: u64) acquires Bal
 
 </details>
 
-## Step 4: Implementing my `BasicCoin` module<span id="Step4"><span>
+## Шаг 4: Реализация модуля `BasicCoin`<span id="Step4"><span>
 
-We have created a Move package for you in folder `step_4` called `BasicCoin`. The `sources` folder contains source code for
-all your Move modules in the package, including `BasicCoin.move`. In this section, we will take a closer look at the
-implementation of the methods inside [`BasicCoin.move`](./step_4/BasicCoin/sources/BasicCoin.move).
+Мы уже подготовили для вас пакет Move в дирректории `step_4` который называется `BasicCoin`. В директории `sources` уже лежат исходники для всех модулей, включая `BasicCoin.move`. В этом разделе мы подробней разберем реализацию методов[`BasicCoin.move`](./step_4/BasicCoin/sources/BasicCoin.move).
 
-### Compiling our code
+### Компилируем код
 
-Let's first try building the code using Move package by running the following command
-in [`step_4/BasicCoin`](./step_4/BasicCoin) folder:
+Давайте сначала соберем проект запустив команду в директории [`step_4/BasicCoin`](./step_4/BasicCoin):
 
 ```bash
 move package build
 ```
 
-### Implementation of methods
+### Реализация методов
 
-Now let's take a closer look at the implementation of the methods inside [`BasicCoin.move`](<(./step_4/BasicCoin/sources/BasicCoin.move)>).
+Теперь посмотрим на реализацию методов в [`BasicCoin.move`](<(./step_4/BasicCoin/sources/BasicCoin.move)>).
 
 <details>
-<summary>Method <code>publish_balance</code></summary>
+<summary>Метод <code>publish_balance</code></summary>
 
-This method publishes a `Balance` resource to a given address. Since this resource is needed to receive coins through
-minting or transferring, `publish_balance` method must be called by a user before they can receive money, including the
-module owner.
+Этод метод публикует ресурс `Balance` по заданному адресу. Это нужно для того чтобы владелец адреса мог получать заминченные или переданные другим владельцем монеты. `publish_balance` должен быть вызван самим владельцем адреса до начала других операций.
 
-This method uses a `move_to` operation to publish the resource:
+Этот метод использует операцию `move_to` для публикации ресурса:
 
 ```
 let empty_coin = Coin { value: 0 };
@@ -353,23 +348,18 @@ move_to(account, Balance { coin:  empty_coin });
 
 </details>
 <details>
-<summary>Method <code>mint</code></summary>
+<summary>Метод <code>mint</code></summary>
 
-`mint` method mints coins to a given account. Here we require that `mint` must be approved
-by the module owner. We enforce this using the assert statement:
+Метод `mint` минтит монеты на заданный аккаунт. Этот вызов должен быть одобрен владельцем модуля и мы убеждаемся в этом используя assert:
 
 ```
 assert!(Signer::address_of(&module_owner) == MODULE_OWNER, Errors::requires_address(ENOT_MODULE_OWNER));
 ```
 
-Assert statements in Move can be used in this way: `assert!(<predicate>, <abort_code>);`. This means that if the `<predicate>`
-is false, then abort the transaction with `<abort_code>`. Here `MODULE_OWNER` and `ENOT_MODULE_OWNER` are both constants
-defined at the beginning of the module. And `Errors` module defines common error categories we can use.
-It is important to note that Move is transactional in its execution -- so
-if an [abort](https://diem.github.io/move/abort-and-assert.html) is raised no unwinding of state
-needs to be performed, as no changes from that transaction will be persisted to the blockchain.
+Assert имеет следующую сигнатуру: `assert!(<predicate>, <abort_code>);`. Это выражение значит что если `<predicate>` равен false то транзакция прервется с кодом `<abort_code>`. В выражении свержу `MODULE_OWNER` и `ENOT_MODULE_OWNER` - константы определенные в начале модуля. Модуль `Errors` содержит общие категории ошибок которые мы можем использовать.
+Важно понимать что выполнение кода на Move транзакционно -- это значит что если исполнение [прервется](https://diem.github.io/move/abort-and-assert.html), то не потребуется откатывать какие-либо операции, так как в этом случае в блокчейн записано ничего не будет.
 
-We then deposit a coin with value `amount` to the balance of `mint_addr`.
+После чего мы пополняем монеты в колличестве `value` на баланс `mint_addr`.
 
 ```
 deposit(mint_addr, Coin { value: amount });
@@ -378,9 +368,9 @@ deposit(mint_addr, Coin { value: amount });
 </details>
 
 <details>
-<summary>Method <code>balance_of</code></summary>
+<summary>Метод <code>balance_of</code></summary>
 
-We use `borrow_global`, one of the global storage operators, to read from the global storage.
+Тут мы используем `borrow_global` - один из операторов работы с глобальным стораджем предназначенный для чтения.
 
 ```
 borrow_global<Balance>(owner).coin.value
@@ -391,10 +381,9 @@ borrow_global<Balance>(owner).coin.value
 </details>
 
 <details>
-<summary>Method <code>transfer</code></summary>
+<summary>Метод <code>transfer</code></summary>
 
-This function withdraws tokens from `from`'s balance and deposits the tokens into `to`s balance. We take a closer look
-at `withdraw` helper function:
+Эта функция снимает токены с баланса счета c адреса `from` и помещает их на баланс адреса `to`. Вот как выглядит эта функция:
 
 ```
 fun withdraw(addr: address, amount: u64) : Coin acquires Balance {
@@ -406,309 +395,19 @@ fun withdraw(addr: address, amount: u64) : Coin acquires Balance {
 }
 ```
 
-At the beginning of the method, we assert that the withdrawing account has enough balance. We then use `borrow_global_mut`
-to get a mutable reference to the global storage, and `&mut` is used to create a [mutable reference](https://diem.github.io/move/references.html) to a field of a
-struct. We then modify the balance through this mutable reference and return a new coin with the withdrawn amount.
+В начале метода мы проверяем что на на адресе списания достаточно токенов на балансе. После чего используем `borrow_global_mut` чтобы получить ссылку с возможностью записи в глобальное хранилище, а оператор `&mut` нужен для того чтобы создать ссылку с [возможностью записи](https://diem.github.io/move/references.html) на поле структуры. После чего модифицируем баланс через полученную ссылку и возвращаем новую монету со значением равным тому что было только что списано.
 
 </details>
 
-### Exercises
+### Упражнения
 
-There are two `TODO`s in our module, left as exercises for the reader:
+В нашем модуле есть два `TODO`, которые можно реализовать чтобы потренироваться:
 
-- Finish implementing the `publish_balance` method.
-- Implement the `deposit` method.
+- Допишите метод `publish_balance`.
+- Реализуйте метод `deposit`.
 
-The solution to this exercise can be found in [`step_4_sol`](./step_4_sol) folder.
+Решение этого упражнения можно найти в дирректории [`step_4_sol`](./step_4_sol).
 
-**Bonus exercise**
+**Бонусные упражнения**
 
-- What would happen if we deposit too many tokens to a balance?
-
-## Step 5: Adding and using unit tests with the `BasicCoin` module<span id="Step5"><span>
-
-In this step we're going to take a look at all the different unit tests
-we've written to cover the code we wrote in step 4. We're also going to
-take a look at some tools we can use to help us write tests.
-
-To get started, run the `package test` command in the [`step_5/BasicCoin`](./step_5/BasicCoin) folder
-
-```bash
-move package test
-```
-
-You should see something like this:
-
-```
-BUILDING MoveStdlib
-BUILDING BasicCoin
-Running Move unit tests
-[ PASS    ] 0xcafe::BasicCoin::can_withdraw_amount
-[ PASS    ] 0xcafe::BasicCoin::init_check_balance
-[ PASS    ] 0xcafe::BasicCoin::init_non_owner
-[ PASS    ] 0xcafe::BasicCoin::publish_balance_already_exists
-[ PASS    ] 0xcafe::BasicCoin::publish_balance_has_zero
-[ PASS    ] 0xcafe::BasicCoin::withdraw_dne
-[ PASS    ] 0xcafe::BasicCoin::withdraw_too_much
-Test result: OK. Total tests: 7; passed: 7; failed: 0
-```
-
-Taking a look at the tests in the
-[`BasicCoin` module](./step_5/BasicCoin/sources/BasicCoin.move) we've tried
-to keep each unit test to testing one particular behavior.
-
-<details>
-<summary>Exercise</summary>
-
-After taking a look at the tests, try and write a unit test called
-`balance_of_dne` in the `BasicCoin` module that tests the case where a
-`Balance` resource doesn't exist under the address that `balance_of` is being
-called on. It should only be a couple lines!
-
-The solution to this exercise can be found in [`step_5_sol`](./step_5_sol)
-
-</details>
-
-## Step 6: Making my `BasicCoin` module generic<span id="Step6"><span>
-
-In Move, we can use generics to define functions and structs over different input data types. Generics are a great
-building block for library code. In this section, we are going to make our simple `BasicCoin` module generic so that it can
-serve as a library module that can be used by other user modules.
-
-First, we add type parameters to our data structs:
-
-```
-struct Coin<phantom CoinType> has store {
-    value: u64
-}
-
-struct Balance<phantom CoinType> has key {
-    coin: Coin<CoinType>
-}
-```
-
-We also add type parameters to our methods in the same manner. For example, `withdraw` becomes the following:
-
-```
-fun withdraw<CoinType>(addr: address, amount: u64) : Coin<CoinType> acquires Balance {
-    let balance = balance_of<CoinType>(addr);
-    assert!(balance >= amount, EINSUFFICIENT_BALANCE);
-    let balance_ref = &mut borrow_global_mut<Balance<CoinType>>(addr).coin.value;
-    *balance_ref = balance - amount;
-    Coin<CoinType> { value: amount }
-}
-```
-
-Take a look at [`step_6/BasicCoin/sources/BasicCoin.move`](./step_6/BasicCoin/sources/BasicCoin.move) to see the full implementation.
-
-At this point, readers who are familiar with Ethereum might notice that this module serves a similar purpose as
-the [ERC20 token standard](https://ethereum.org/en/developers/docs/standards/tokens/erc-20/), which provides an
-interface for implementing fungible tokens in smart contracts. One key advantage of using generics is the ability
-to reuse code since the generic library module already provides a standard implementation and the instantiating module
-can provide customizations by wrapping the standard implementation.
-
-We provide a little module called [`MyOddCoin`](./step_6/BasicCoin/sources/MyOddCoin.move) that instantiates
-the `Coin` type and customizes its transfer policy: only odd number of coins can be transferred. We also include two
-[tests](./step_6/BasicCoin/sources/MyOddCoin.move) to test this behavior. You can use the commands you learned in step 2 and step 5 to run the tests.
-
-#### Advanced topics:
-
-<details>
-<summary><code>phantom</code> type parameters</summary>
-
-In definitions of both `Coin` and `Balance`, we declare the type parameter `CoinType`
-to be phantom because `CoinType` is not used in the struct definition or is only used as a phantom type
-parameter.
-
-Read more about phantom type parameters <a href="https://diem.github.io/move/generics.html#phantom-type-parameters">here</a>.
-
-</details>
-
-## Advanced steps
-
-Before moving on to the next steps, let's make sure you have all the prover dependencies installed.
-
-Try running `boogie /version `. If an error message shows up saying "command not found: boogie", you will have to run the
-setup script and source your profile:
-
-```bash
-# run the following in diem repo root directory
-./scripts/dev_setup.sh -yp
-source ~/.profile
-```
-
-## Step 7: Use the Move prover<span id="Step7"><span>
-
-Smart contracts deployed on the blockchain may maniputate high-value assets. As a technique that uses strict mathematical methods to describe behavior and reason correctness of computer systems, formal verification has been used in blockchains to prevent bugs in smart contracts. [The Move prover](https://github.com/diem/move/tree/main/language/move-prover) is an evolving formal verification tool for smart contracts written in the Move language. The user can specify functional properties of smart contracts using the [Move Specification Language (MSL)](https://github.com/diem/move/blob/main/language/move-prover/doc/user/spec-lang.md) and then use the prover to automatically check them statically. To illustrate how the prover is used, we have added the following code snippet to the [BasicCoin.move](./step_7/BasicCoin/sources/BasicCoin.move):
-
-```
-    spec balance_of {
-        pragma aborts_if_is_strict;
-    }
-```
-
-Informally speaking, the block `spec balance_of {...}` contains the property specification of the method `balance_of`.
-
-Let's first run the prover using the following command inside [`BasicCoin` directory](./step_7/BasicCoin/):
-
-```bash
-move package prove
-```
-
-which outputs the following error information:
-
-```
-error: abort not covered by any of the `aborts_if` clauses
-   ┌─ diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:38:5
-   │
-35 │           borrow_global<Balance<CoinType>>(owner).coin.value
-   │           ------------- abort happened here with execution failure
-   ·
-38 │ ╭     spec balance_of {
-39 │ │         pragma aborts_if_is_strict;
-40 │ │     }
-   │ ╰─────^
-   │
-   =     at /diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:34: balance_of
-   =         owner = 0x29
-   =     at /diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:35: balance_of
-   =         ABORTED
-
-Error: exiting with verification errors
-```
-
-The prover basically tells us that we need to explicitly specify the condition under which the function `balance_of` will abort, which is caused by calling the function `borrow_global` when `owner` does not own the resource `Balance<CoinType>`. To remove this error information, we add an `aborts_if` condition as follows:
-
-```
-    spec balance_of {
-        pragma aborts_if_is_strict;
-        aborts_if !exists<Balance<CoinType>>(owner);
-    }
-```
-
-After adding this condition, try running the `prove` command again to confirm that there are no verification errors:
-
-```bash
-move package prove
-```
-
-Apart from the abort condition, we also want to define the functional properties. In Step 8, we will give more detailed introduction to the prover by specifying properties for the methods defined the `BasicCoin` module.
-
-## Step 8: Write formal specifications for the `BasicCoin` module<span id="Step8"><span>
-
-<details>
-
-<summary> Method withdraw </summary>
-
-The signature of the method `withdraw` is given below:
-
-```
-fun withdraw<CoinType>(addr: address, amount: u64) : Coin<CoinType> acquires Balance
-```
-
-The method withdraws tokens with value `amount` from the address `addr` and returns a created Coin of value `amount`. The method `withdraw` aborts when 1) `addr` does not have the resource `Balance<CoinType>` or 2) the number of tokens in `addr` is smaller than `amount`. We can define conditions like this:
-
-```
-   spec withdraw {
-        let balance = global<Balance<CoinType>>(addr).coin.value;
-        aborts_if !exists<Balance<CoinType>>(addr);
-        aborts_if balance < amount;
-    }
-```
-
-As we can see here, a spec block can contain let bindings which introduce names for expressions. `global<T>(address): T` is a built-in function that returns the resource value at `addr`. `balance` is the number of tokens owned by `addr`. `exists<T>(address): bool` is a built-in function that returns true if the resource T exists at address. Two `aborts_if` clauses correspond to the two conditions mentioned above. In general, if a function has more than one `aborts_if` condition, those conditions are or-ed with each other. By default, if a user wants to specify aborts conditions, all possible conditions need to be listed. Otherwise, the prover will generate a verification error. However, if `pragma aborts_if_is_partial` is defined in the spec block, the combined aborts condition (the or-ed individual conditions) only _imply_ that the function aborts. The reader can refer to the [MSL](https://github.com/diem/move/blob/main/language/move-prover/doc/user/spec-lang.md) document for more information.
-
-The next step is to define functional properties, which are described in the two `ensures` clauses below. First, by using the `let post` binding, `balance_post` represents the balance of `addr` after the execution, which should be equal to `balance - amount`. Then, the return value (denoted as `result`) should be a coin with value `amount`.
-
-```
-   spec withdraw {
-        let balance = global<Balance<CoinType>>(addr).coin.value;
-        aborts_if !exists<Balance<CoinType>>(addr);
-        aborts_if balance < amount;
-
-        let post balance_post = global<Balance<CoinType>>(addr).coin.value;
-        ensures balance_post == balance - amount;
-        ensures result == Coin<CoinType> { value: amount };
-    }
-```
-
-</details>
-
-<details>
-<summary> Method deposit </summary>
-
-The signature of the method `deposit` is given below:
-
-```
-fun deposit<CoinType>(addr: address, check: Coin<CoinType>) acquires Balance
-```
-
-The method deposits the `check` into `addr`. The specification is defined below:
-
-```
-    spec deposit {
-        let balance = global<Balance<CoinType>>(addr).coin.value;
-        let check_value = check.value;
-
-        aborts_if !exists<Balance<CoinType>>(addr);
-        aborts_if balance + check_value > MAX_U64;
-
-        let post balance_post = global<Balance<CoinType>>(addr).coin.value;
-        ensures balance_post == balance + check_value;
-    }
-```
-
-`balance` represents the number of tokens in `addr` before execution and `check_value` represents the number of tokens to be deposited. The method would abort if 1) `addr` does not have the resource `Balance<CoinType>` or 2) the sum of `balance` and `check_value` is greater than the maxium value of the type `u64`. The functional property checks that the balance is correctly updated after the execution.
-
-</details>
-
-<details>
-
-<summary> Method transfer </summary>
-
-The signature of the method `transfer` is given below:
-
-```
-public fun transfer<CoinType: drop>(from: &signer, to: address, amount: u64, _witness: CoinType) acquires Balance
-```
-
-The method transfers the `amount` of coin from the account of `from` to the address `to`. The specification is given below:
-
-```
-spec transfer {
-        let addr_from = Signer::address_of(from);
-
-        let balance_from = global<Balance<CoinType>>(addr_from).coin.value;
-        let balance_to = global<Balance<CoinType>>(to).coin.value;
-        let post balance_from_post = global<Balance<CoinType>>(addr_from).coin.value;
-        let post balance_to_post = global<Balance<CoinType>>(to).coin.value;
-
-        ensures balance_from_post == balance_from - amount;
-        ensures balance_to_post == balance_to + amount;
-    }
-```
-
-`addr_from` is the address of `from`. Then the balances of `addr_from` and `to` before and after the execution are obtained.
-The `ensures` clauses specify that the `amount` number of tokens is deducted from `addr_from` and added to `to`. However, the prover will generate the error information as below:
-
-```
-   ┌─ diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:62:9
-   │
-62 │         ensures balance_from_post == balance_from - amount;
-   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   │
-   ...
-```
-
-The property is not held when `addr_from` is equal to `to`. As a result, we could add an assertion `assert!(from_addr != to)` in the method to make sure that `addr_from` is not equal to `to`.
-
-</details>
-
-<details>
-
-<summary> Exercises </summary>
-
-- Implement the `aborts_if` conditions for the `transfer` method.
-- Implement the specification for the `mint` and `publish_balance` method.
-
-The solution to this exercise can be found in [`step_8_sol`](./step_8_sol).
+- Что произойдет если мы попытаемся перевести слишком много токенов на баланс?
