@@ -10,7 +10,7 @@
 - [Шаг 3: Дизайн модуля `BasicCoin`](#Step3)
 - [Шаг 4: Реализация модуля `BasicCoin`](#Step4)
 - [Шаг 5: Добавление юнит тестов в `BasicCoin`](#Step5)
-- [Шаг 6: Релизация `BasicCoin` с поддержкой generics](#Step6)
+- [Шаг 6: Релизация `BasicCoin` выражений ( в блоке ниже ). Сначала используется `let post`с поддержкой generics](#Step6)
 - [Шаг 7: Использование Move prover](#Step7)
 - [Шаг 8: Написание формальной спецификации для `BasicCoin`](#Step8)
 
@@ -503,3 +503,177 @@ fun withdraw<CoinType>(addr: address, amount: u64) : Coin<CoinType> acquires Bal
 ./scripts/dev_setup.sh -yp
 source ~/.profile
 ```
+
+## Шаг 7: Использование Move prover<span id="Step7"><span>
+
+Смарт контракты в блокчейне могу манипулировать активами которые дорого стоят. Существует техника которая использует математические методы чтобы описать поведение и корректность компьюетерных систем и она называется формальная верификация, поэтому она подходит для блокчейна чтобы избежать наличия багов в смарт контрактах. [The Move prover](https://github.com/diem/move/tree/main/language/move-prover) - это развивающийся инструмент для формальной верификации смартконтрактов написанных на Move. Пользователь может описать свойства контракта используя [Язык спецификации Move](https://github.com/diem/move/blob/main/language/move-prover/doc/user/spec-lang.md) после чего использовать prover чтобы проверить их. Чтобы продемонстрировать как работает prover мы добавили следующий кусок кода в [BasicCoin.move](./step_7/BasicCoin/sources/BasicCoin.move):
+
+```
+    spec balance_of {
+        pragma aborts_if_is_strict;
+    }
+```
+
+Блок `spec balance_of {...}` содержит спецификацию свойств метода `balance_of`.
+
+Давайте запустим prover используя следующую команду в дирректории [`BasicCoin` directory](./step_7/BasicCoin/):
+
+```bash
+move package prove
+```
+
+которая выдаст следующую ошибку:
+
+```
+error: abort not covered by any of the `aborts_if` clauses
+   ┌─ diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:38:5
+   │
+35 │           borrow_global<Balance<CoinType>>(owner).coin.value
+   │           ------------- abort happened here with execution failure
+   ·
+38 │ ╭     spec balance_of {
+39 │ │         pragma aborts_if_is_strict;
+40 │ │     }
+   │ ╰─────^
+   │
+   =     at /diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:34: balance_of
+   =         owner = 0x29
+   =     at /diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:35: balance_of
+   =         ABORTED
+
+Error: exiting with verification errors
+```
+
+Prover говорит что нам над явно указать условие при котором функция `balance_of` будет прервана, что свою очередь случается в случае если вызвать `borrow_global` когда на аккунте у `owner` нет ресурса `Balance<CoinType>`. Чтобы избавиться от этой ошибки, мы должны добавить условие `aborts_if` следующим образом:
+
+```
+    spec balance_of {
+        pragma aborts_if_is_strict;
+        aborts_if !exists<Balance<CoinType>>(owner);
+    }
+```
+
+После добавления этого условия, попробуйте запустить команду `prove` чтобы убедиться что теперь ошибки верификации исчезли:
+
+```bash
+move package prove
+```
+
+Помимо условий прерывания транзакции, хочется так же добавить и условий про работу функции. В шаге 8 добавим более детальные инструкции для прувера и опишем свойства методов из `BasicCoin`.
+
+## Шаг 8: Написание формальной спецификации для `BasicCoin`<span id="Step8"><span>
+
+<details>
+
+<summary> Метод `withdraw` </summary>
+
+У `withdraw` следующая сигнатура:
+
+```
+fun withdraw<CoinType>(addr: address, amount: u64) : Coin<CoinType> acquires Balance
+```
+
+Метод списывает монеты в колличестве `amount` с адреса `addr` и возвращает новую монету в количестве `amount`. Метод `withdraw` прерывается в случае если 1) По адресу `addr` еще нету ресурса `Balance<CoinType>` либо 2) Количество монет лежащее на `addr` меньше чем требуется перевести. Эти условия можно описать следующим образом:
+
+```
+   spec withdraw {
+        let balance = global<Balance<CoinType>>(addr).coin.value;
+        aborts_if !exists<Balance<CoinType>>(addr);
+        aborts_if balance < amount;
+    }
+```
+
+В блоке spec выражениям можно присваивать имена используя `let`. Встроенная функция `global<T>(address): T` возвращает значение ресурса по адресу `addr` поэтому `balance` в данном случае - это количество токенов находящихся по адресу `addr`. Функция `exists<T>(address): bool` возвращает true в случае если ресурс T существует по адресу `address`. Два выражения `aborts_if` проверяют условия 1 и 2, описанные выше.
+
+В следующем шаге описываются фунциональные свойства, которые описываются с помощью `ensures` выражений ( в блоке ниже ). Сначала используя `let post` объявляется `balance_post` который соответствует балансу `addr` после выполнения и который должен быть равен `balance - amount`. После чего конечный результат ( обозначаемый как `result` ) должен быть равен значению `amount`.
+
+```
+   spec withdraw {
+        let balance = global<Balance<CoinType>>(addr).coin.value;
+        aborts_if !exists<Balance<CoinType>>(addr);
+        aborts_if balance < amount;
+
+        let post balance_post = global<Balance<CoinType>>(addr).coin.value;
+        ensures balance_post == balance - amount;
+        ensures result == Coin<CoinType> { value: amount };
+    }
+```
+
+</details>
+
+<summary> Метод deposit </summary>
+
+У метода `deposit` вот такая сигнатура:
+
+```
+fun deposit<CoinType>(addr: address, check: Coin<CoinType>) acquires Balance
+```
+
+Метод переводит `check` по адресу `addr`. Его спецификацию можно описать следующим образом:
+
+```
+    spec deposit {
+        let balance = global<Balance<CoinType>>(addr).coin.value;
+        let check_value = check.value;
+
+        aborts_if !exists<Balance<CoinType>>(addr);
+        aborts_if balance + check_value > MAX_U64;
+
+        let post balance_post = global<Balance<CoinType>>(addr).coin.value;
+        ensures balance_post == balance + check_value;
+    }
+```
+
+Тут `balance` представляет количество токенов по адресу `addr` до выполнения функции, а `check_value` - количество токенов которое необходимо перевести. Метод прерывается в двух случаях: 1) `addr` не содержит ресурса `Balance<CoinType>` или 2) сумма `balance` и `check_value` больше чем максимальное значение которое может поместиться в тип `u64`. Функциональное свойств проверяет что после выполнения функции баланс будет корректно обновлен.
+
+</details>
+
+<details>
+
+<summary> Метод transfer </summary>
+
+Вот сигнатура метода `transfer`:
+
+```
+public fun transfer<CoinType: drop>(from: &signer, to: address, amount: u64, _witness: CoinType) acquires Balance
+```
+
+Метод переводит монеты в колличестве `amount` cо счета `from` на счет `to`. Спецификацию метода можно описать следующим образом:
+
+```
+spec transfer {
+        let addr_from = Signer::address_of(from);
+
+        let balance_from = global<Balance<CoinType>>(addr_from).coin.value;
+        let balance_to = global<Balance<CoinType>>(to).coin.value;
+        let post balance_from_post = global<Balance<CoinType>>(addr_from).coin.value;
+        let post balance_to_post = global<Balance<CoinType>>(to).coin.value;
+
+        ensures balance_from_post == balance_from - amount;
+        ensures balance_to_post == balance_to + amount;
+    }
+```
+
+Тут `addr_from` - это адрес `from`. После чего идет описание балансов `addr_from` и `to` до и после выполнения транзакции. И хотя `ensures` описывают что токены в колличестве `amount` списываются с `addr_from` и переводятся на `to` - прувер все равно выдаст ошибку:
+
+```
+   ┌─ diem/language/documentation/hackathon-tutorial/step_7/BasicCoin/sources/BasicCoin.move:62:9
+   │
+62 │         ensures balance_from_post == balance_from - amount;
+   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   ...
+```
+
+Что говорит о том что условие не выполняется в случае если `addr_from` равен `to`. Так что нужно добавить в метод условие `assert!(from_addr != to)` чтобы соответствовать спецификации.
+
+</details>
+
+<details>
+
+<summary> Упражнения </summary>
+
+- Реализуйте `aborts_if` условия для метода `transfer`.
+- Напишите спецификацию для методов `mint` и `publish_balance`.
+
+Решения к этиму упражнениям можно найти в [`step_8_sol`](./step_8_sol).
